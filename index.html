@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LEGO Movie Maker</title>
+<style>
+:root{color-scheme:dark;--bg:#101319;--panel:#1a202a;--line:#303948;--accent:#f0b429;--text:#f4f6f8;--muted:#aab3c0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#151a22}
+h1{font-size:21px;margin:0}h1 span{color:var(--accent)}.sub{color:var(--muted);font-size:12px;margin-top:3px}
+main{max-width:1180px;margin:auto;padding:20px;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(270px,.8fr);gap:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px;min-width:0}
+h2{font-size:15px;margin:0 0 12px}.stage{background:#080a0e;border-radius:10px;overflow:hidden;position:relative;aspect-ratio:16/9;display:grid;place-items:center}
+video,#ghost{position:absolute;width:100%;height:100%;object-fit:contain}#ghost{opacity:.28;pointer-events:none}#empty{color:#7f8997;text-align:center;padding:20px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}button,select,input{font:inherit;border-radius:9px;border:1px solid var(--line);padding:9px 12px;background:#252d39;color:var(--text)}
+button{cursor:pointer}button.primary{background:var(--accent);border-color:var(--accent);color:#17130a;font-weight:700}button:disabled{opacity:.4;cursor:not-allowed}
+label{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}.side{display:grid;gap:18px;align-content:start}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}.row label{flex:1}.row input[type=text]{width:100%}
+#frames{display:flex;gap:8px;overflow-x:auto;padding:8px 0;min-height:86px}.thumb{width:92px;flex:0 0 92px;border:2px solid transparent;border-radius:8px;overflow:hidden;background:#0c1016;cursor:pointer}.thumb.selected{border-color:var(--accent)}.thumb img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}.thumb small{display:block;padding:4px;color:var(--muted)}
+.status{color:var(--muted);font-size:12px;min-height:18px;margin-top:8px}.hint{font-size:12px;color:var(--muted);line-height:1.5}
+@media(max-width:760px){main{grid-template-columns:1fr;padding:12px}header{padding:14px}.panel{padding:12px}}
+</style>
+</head>
+<body>
+<header><div><h1>🎬 LEGO <span>Movie Maker</span></h1><div class="sub">Dein persönliches Stop-Motion-Filmstudio</div></div><div class="sub">STUDIO · FRAME BY FRAME</div></header>
+<main>
+<section class="panel">
+<h2>Aufnahmebühne</h2>
+<div class="stage"><video id="camera" autoplay playsinline muted></video><img id="ghost" hidden alt=""><div id="empty">Kamera starten oder ein Bild hochladen</div></div>
+<div class="controls">
+<button class="primary" id="start">Kamera starten</button><button id="snap" disabled>📸 Bild aufnehmen</button>
+<label><input id="onion" type="checkbox" checked> Zwiebelhaut</label>
+</div>
+<div class="controls"><label>Bild hochladen <input id="upload" type="file" accept="image/*" multiple></label></div>
+<div class="status" id="status">Bereit. Erlaube den Kamerazugriff, wenn du fotografieren möchtest.</div>
+</section>
+<aside class="side">
+<section class="panel"><h2>Film-Einstellungen</h2>
+<div class="row"><label for="project">Projektname</label></div><input id="project" type="text" value="Mein LEGO-Film">
+<div class="row"><label for="fps">Bilder pro Sekunde</label><select id="fps"><option>5</option><option selected>10</option><option>12</option><option>15</option><option>20</option></select></div>
+<div class="row"><label for="size">Exportgröße</label><select id="size"><option value="1280">HD (720p)</option><option value="1920" selected>Full HD (1080p)</option></select></div>
+<p class="hint">Tipp: Bewege deine LEGO-Figuren nur ein kleines Stück und nimm dann das nächste Bild auf.</p>
+</section>
+<section class="panel"><h2>Film-Vorschau</h2>
+<div class="stage" style="aspect-ratio:16/9"><img id="playImage" alt="Filmvorschau" style="width:100%;height:100%;object-fit:contain;display:none"><div id="previewEmpty">Dein Film erscheint hier.</div></div>
+<div class="controls"><button class="primary" id="play" disabled>▶ Abspielen</button><button id="stop" disabled>■ Stopp</button><button id="export" disabled>⬇ Video exportieren</button></div>
+</section>
+</aside>
+<section class="panel" style="grid-column:1/-1"><h2>Bildstreifen <span id="count" class="sub">0 Bilder</span></h2><div id="frames"><div class="hint">Deine aufgenommenen Bilder erscheinen hier.</div></div>
+<div class="controls"><button id="undo" disabled>↶ Letztes Bild löschen</button><button id="clear" disabled>Alles löschen</button></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let stream=null,frames=[],selected=-1,timer=null,playIndex=0;
+function say(t){$('status').textContent=t}
+function refresh(){
+ $('count').textContent=frames.length+' Bilder';$('frames').innerHTML='';
+ if(!frames.length)$('frames').innerHTML='<div class="hint">Deine aufgenommenen Bilder erscheinen hier.</div>';
+ frames.forEach((src,i)=>{let b=document.createElement('button');b.className='thumb'+(i===selected?' selected':'');b.innerHTML=`<img src="${src}"><small>Bild ${i+1}</small>`;b.onclick=()=>select(i);$('frames').appendChild(b)});
+ $('play').disabled=frames.length<1;$('export').disabled=frames.length<1;$('undo').disabled=!frames.length;$('clear').disabled=!frames.length;
+}
+function select(i){selected=i;$('ghost').src=i>0?frames[i-1]:'';$('ghost').hidden=!(i>0&&$('onion').checked);$('playImage').src=frames[i];$('playImage').style.display='block';$('previewEmpty').style.display='none';refresh()}
+$('onion').onchange=()=>{$('ghost').hidden=!($('onion').checked&&selected>0)};
+$('start').onclick=async()=>{try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});$('camera').srcObject=stream;$('camera').style.display='block';$('empty').style.display='none';$('snap').disabled=false;$('start').textContent='Kamera läuft';say('Kamera ist bereit.');}catch(e){say('Kamera nicht verfügbar. Bitte Berechtigung prüfen oder ein Bild hochladen.')}};
+$('snap').onclick=()=>{let v=$('camera');if(!v.videoWidth){say('Kamera wird noch gestartet …');return}let c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);add(c.toDataURL('image/jpeg',.9))};
+function add(src){frames.push(src);select(frames.length-1);say('Bild '+frames.length+' hinzugefügt.')};
+$('upload').onchange=async e=>{for(const f of e.target.files){if(!f.type.startsWith('image/'))continue;let src=await new Promise(resolve=>{let r=new FileReader();r.onload=()=>resolve(r.result);r.readAsDataURL(f)});add(src)}e.target.value=''};
+$('undo').onclick=()=>{frames.pop();selected=frames.length-1;if(selected>=0)select(selected);else{refresh();$('ghost').hidden=true;$('playImage').style.display='none';$('previewEmpty').style.display='block'}say('Letztes Bild entfernt.')};
+$('clear').onclick=()=>{if(confirm('Wirklich alle Bilder löschen?')){frames=[];selected=-1;refresh();$('ghost').hidden=true;$('playImage').style.display='none';$('previewEmpty').style.display='block';say('Bildstreifen geleert.')}};
+function stop(){if(timer){clearInterval(timer);timer=null}$('stop').disabled=true;$('play').disabled=frames.length===0}
+$('play').onclick=()=>{if(!frames.length)return;stop();playIndex=0;$('play').disabled=true;$('stop').disabled=false;let show=()=>{if(playIndex>=frames.length){stop();return}$('playImage').src=frames[playIndex++];$('playImage').style.display='block';$('previewEmpty').style.display='none'};show();timer=setInterval(show,1000/Number($('fps').value))};
+$('stop').onclick=stop;
+$('export').onclick=async()=>{if(!frames.length)return;let canvas=document.createElement('canvas'),w=Number($('size').value);canvas.width=w;canvas.height=Math.round(w*9/16);let ctx=canvas.getContext('2d'),images=await Promise.all(frames.map(src=>new Promise((res,rej)=>{let im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=src})));let stream=canvas.captureStream(Number($('fps').value));let mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';let rec;try{rec=new MediaRecorder(stream,{mimeType:mime})}catch(e){say('Videoexport wird von diesem Browser nicht unterstützt.');return}let chunks=[];rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};rec.onstop=()=>{let blob=new Blob(chunks,{type:'video/webm'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=($('project').value.trim()||'lego-film')+'.webm';a.click();URL.revokeObjectURL(url);say('Video wurde exportiert.')};rec.start();for(let im of images){ctx.fillStyle='#000';ctx.fillRect(0,0,w,canvas.height);let scale=Math.min(w/im.width,canvas.height/im.height),dw=im.width*scale,dh=im.height*scale;ctx.drawImage(im,(w-dw)/2,(canvas.height-dh)/2,dw,dh);await new Promise(r=>setTimeout(r,1000/Number($('fps').value)))}rec.stop();say('Video wird erstellt …')};
+refresh();
+</script>
+</body></html>
